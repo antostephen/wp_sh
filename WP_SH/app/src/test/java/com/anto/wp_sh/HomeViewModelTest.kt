@@ -1,109 +1,196 @@
-package com.anto.wp_sh
-
+package com.anto.antostephen_20241003_nyc_school
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.lifecycle.Observer
-import com.anto.wp_sh.data.model.SchoolDetails
-import com.anto.wp_sh.data.repo.SchoolRepository
-import com.anto.wp_sh.viewmodel.HomeViewModel
+import com.anto.antostephen_20241003_nyc_school.data.model.SchoolDetails
+import com.anto.antostephen_20241003_nyc_school.data.model.SchoolScores
+import com.anto.antostephen_20241003_nyc_school.data.repo.SchoolRepository
+import com.anto.antostephen_20241003_nyc_school.viewmodel.HomeViewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.test.*
-import okhttp3.ResponseBody
-import org.junit.*
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.setMain
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.ResponseBody.Companion.toResponseBody
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
 import org.mockito.Mock
 import org.mockito.Mockito.*
-import org.mockito.junit.MockitoJUnit
+import org.mockito.MockitoAnnotations
 import retrofit2.Response
-import java.io.IOException
 
-@ExperimentalCoroutinesApi
 class HomeViewModelTest {
 
     @get:Rule
-    val instantTaskExecutorRule = InstantTaskExecutorRule() // To run LiveData synchronously
-
-    @get:Rule
-    val mockitoRule = MockitoJUnit.rule()
-
-    @Mock
-    private lateinit var repository: SchoolRepository
+    var instantTaskExecutorRule = InstantTaskExecutorRule()
 
     private lateinit var viewModel: HomeViewModel
-
     private val testDispatcher = StandardTestDispatcher()
+
+    @Mock
+    private lateinit var mockRepository: SchoolRepository
 
     @Before
     fun setUp() {
+        MockitoAnnotations.openMocks(this)
         Dispatchers.setMain(testDispatcher)
-        viewModel = HomeViewModel(repository)
-    }
-
-    @After
-    fun tearDown() {
-        Dispatchers.resetMain()
-        testDispatcher.cancel()
+        viewModel = HomeViewModel(mockRepository)
     }
 
     @Test
-    fun `getSchoolDetails should post data when API call is successful`() = runTest {
-        // Given
-        val schoolDetails = SchoolDetails(/*initialize with appropriate values*/)
-        `when`(repository.fetchData()).thenReturn(Response.success(schoolDetails))
+    fun `test getSchoolDetails success`() = runBlocking {
+        // Arrange
+        val schoolDetails = SchoolDetails(/* initialize with valid data */)
+        val response = mockDetailsResponse(success = true, body = schoolDetails)
 
-        // Observer for testing LiveData
-        val observer = mock(Observer::class.java) as Observer<SchoolDetails>
-        viewModel.data.observeForever(observer)
+        `when`(mockRepository.fetchData()).thenReturn(response)
 
-        // When
+        var observedData: SchoolDetails? = null
+        var observedError: String? = null
+
+        // Create observers to capture emitted values
+        val observerData = Observer<SchoolDetails> { observedData = it }
+        val observerError = Observer<String> { observedError = it }
+
+        viewModel.data.observeForever(observerData)
+        viewModel.error.observeForever(observerError)
+
+        // Act
         viewModel.getSchoolDetails()
 
-        // Fast-forward to allow the coroutine to execute
+        // Advance the dispatcher to process the coroutine
         testDispatcher.scheduler.advanceUntilIdle()
 
-        // Then
-        verify(repository).fetchData()
-        verify(observer).onChanged(schoolDetails)
+        // Assert
+        assertEquals(schoolDetails, observedData)
+        assertNull(observedError)
+
+        // Clean up
+        viewModel.data.removeObserver(observerData)
+        viewModel.error.removeObserver(observerError)
     }
 
     @Test
-    fun `getSchoolDetails should post error when API call fails`() = runTest {
-        // Given
-        val errorResponse = Response.error<SchoolDetails>(404, mock(ResponseBody::class.java))
-        `when`(repository.fetchData()).thenReturn(errorResponse)
+    fun `test getSchoolDetails error`() = runBlocking {
+        // Arrange
+        val response = mockDetailsResponse(success = false, code = 404)
 
-        // Observer for testing LiveData
-        val observer = mock(Observer::class.java) as Observer<String>
-        viewModel.error.observeForever(observer)
+        `when`(mockRepository.fetchData()).thenReturn(response)
 
-        // When
+        var observedData: SchoolDetails? = null
+        var observedError: String? = null
+
+        // Create observers to capture emitted values
+        val observerData = Observer<SchoolDetails> { observedData = it }
+        val observerError = Observer<String> { observedError = it }
+
+        viewModel.data.observeForever(observerData)
+        viewModel.error.observeForever(observerError)
+
+        // Act
         viewModel.getSchoolDetails()
 
-        // Fast-forward to allow the coroutine to execute
+        // Advance the dispatcher to process the coroutine
         testDispatcher.scheduler.advanceUntilIdle()
 
-        // Then
-        verify(repository).fetchData()
-        verify(observer).onChanged("Error: 404")
+        // Assert
+        assertNull(observedData)
+        assertEquals("Error: 404", observedError)
+
+        // Clean up
+        viewModel.data.removeObserver(observerData)
+        viewModel.error.removeObserver(observerError)
+    }
+
+    private fun mockDetailsResponse(success: Boolean, body: SchoolDetails? = null, code: Int = 200): Response<SchoolDetails> {
+        return if (success) {
+            Response.success(body)
+        } else {
+            val errorBody = ("{\"msg\":\"There was an error\"," +
+                    "\"msgType\":\"API Error\"," +
+                    "\"msgBody\":\"An exception occurred while trying to fetch the School Details data from the server\"}").toResponseBody("application/json".toMediaType())
+            Response.error(code, errorBody)
+        }
+    }
+
+
+    @Test
+    fun `test getSchoolScores success`() = runBlocking {
+        // Arrange
+        val schoolDetails = SchoolScores(/* initialize with valid data */)
+        val response = mockScoresResponse(success = true, body = schoolDetails)
+
+        `when`(mockRepository.fetchScores()).thenReturn(response)
+
+        var observedData: SchoolScores? = null
+        var observedError: String? = null
+
+        // Create observers to capture emitted values
+        val observerData = Observer<SchoolScores> { observedData = it }
+        val observerError = Observer<String> { observedError = it }
+
+        viewModel.scores.observeForever(observerData)
+        viewModel.error.observeForever(observerError)
+
+        // Act
+        viewModel.getSchoolScores()
+
+        // Advance the dispatcher to process the coroutine
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Assert
+        assertEquals(schoolDetails, observedData)
+        assertNull(observedError)
+
+        // Clean up
+        viewModel.scores.removeObserver(observerData)
+        viewModel.error.removeObserver(observerError)
     }
 
     @Test
-    fun `getSchoolDetails should post exception when API call throws an exception`() = runTest {
-        // Given
-        `when`(repository.fetchData()).thenThrow(IOException("Network error"))
+    fun `test getSchoolScores error`() = runBlocking {
+        // Arrange
+        val response = mockScoresResponse(success = false, code = 404)
 
-        // Observer for testing LiveData
-        val observer = mock(Observer::class.java) as Observer<String>
-        viewModel.error.observeForever(observer)
+        `when`(mockRepository.fetchScores()).thenReturn(response)
 
-        // When
-        viewModel.getSchoolDetails()
+        var observedData: SchoolScores? = null
+        var observedError: String? = null
 
-        // Fast-forward to allow the coroutine to execute
+        // Create observers to capture emitted values
+        val observerData = Observer<SchoolScores> { observedData = it }
+        val observerError = Observer<String> { observedError = it }
+
+        viewModel.scores.observeForever(observerData)
+        viewModel.error.observeForever(observerError)
+
+        // Act
+        viewModel.getSchoolScores()
+
+        // Advance the dispatcher to process the coroutine
         testDispatcher.scheduler.advanceUntilIdle()
 
-        // Then
-        verify(repository).fetchData()
-        verify(observer).onChanged("Exception: Network error")
+        // Assert
+        assertNull(observedData)
+        assertEquals("Error: 404", observedError)
+
+        // Clean up
+        viewModel.scores.removeObserver(observerData)
+        viewModel.error.removeObserver(observerError)
     }
+
+    private fun mockScoresResponse(success: Boolean, body: SchoolScores? = null, code: Int = 200): Response<SchoolScores> {
+        return if (success) {
+            Response.success(body)
+        } else {
+            val errorBody = ("{\"msg\":\"There was an error\"," +
+                    "\"msgType\":\"API Error\"," +
+                    "\"msgBody\":\"An exception occurred while trying to fetch the School Scores data from the server\"}").toResponseBody("application/json".toMediaType())
+            Response.error(code, errorBody)
+        }
+    }
+
+
 }
